@@ -87,7 +87,17 @@ Démarrer la vm
 vagrant up
 ```
 
-Récupérer la configuration ssh :
+On peut aussi sélectionner un provider particulier : 
+```shell
+vagrant up --provider=libvirt
+```
+
+Se connecter en SSH :
+```shell
+vagrant ssh
+```
+
+Une autre méthode est de récupérer la configuration ssh :
 ```shell
 vagrant ssh-config
 ```
@@ -100,7 +110,7 @@ Host default
   UserKnownHostsFile /dev/null
   StrictHostKeyChecking no
   PasswordAuthentication no
-  IdentityFile /home/rmdir/WebstormProjects/vagrant/.vagrant/machines/default/virtualbox/private_key
+  IdentityFile /home/USERNAME/WebstormProjects/vagrant/.vagrant/machines/default/virtualbox/private_key
   IdentitiesOnly yes
   LogLevel FATAL
   PubkeyAcceptedKeyTypes +ssh-rsa
