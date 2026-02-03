@@ -1,0 +1,13 @@
+- hosts: all
+  become: true
+
+  tasks:
+    - name: Install postgresql
+      apt:
+        name: postgresql
+        state: present
+
+    - name: "Configurer critical.conf"
+      copy:
+        dest: /etc/critical2.conf
+        content: "unique_value"
