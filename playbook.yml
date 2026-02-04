@@ -1,15 +1,15 @@
-- hosts: web
+- hosts: webapp
   become: true
 
   tasks:
-    - name: Install apache2
+    - name: Install nginx
       apt:
-        name: apache2
+        name: nginx
         state: present
 
-    - name: Demarrer apache2
+    - name: Demarrer nginx
       service:
-        name: apache2
+        name: nginx
         state: started
         enabled: yes
 
@@ -33,3 +33,47 @@
         name: postgresql
         state: started
         enabled: yes
+
+- hosts: pgadmin
+  become: true
+
+  tasks:
+    - name: Install Pgadmin4 dependencies
+      apt:
+        name:
+          - curl
+          - ca-certificates
+          - gpg
+        state: present
+        update_cache: yes
+
+    - name: Download pgAdmin GPG key
+      get_url:
+        url: https://www.pgadmin.org/static/packages_pgadmin_org.pub
+        dest: /usr/share/keyrings/pgadmin-keyring.gpg
+        mode: '0644'
+
+    - name: Add pgAdmin repository
+      apt_repository:
+        repo: >
+          deb [signed-by=/usr/share/keyrings/pgadmin-keyring.gpg]
+          https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/{{ ansible_distribution_release }}
+          pgadmin4 main
+        state: present
+        filename: pgadmin4
+
+    - name: Install Pgadmin4
+      apt:
+        name: [pgadmin4-web, pgadmin4-server, postgresql-client]
+        state: present
+        update_cache: yes
+
+    - name: Configure PGadmin4 web
+      environment:
+        PGADMIN_SETUP_EMAIL: "test@test.com"
+        PGADMIN_SETUP_PASSWORD: "Password1234!"
+      shell: "/usr/pgadmin4/bin/setup-web.sh --yes"
+      args:
+        # Si /etc/apache2/conf-enabled/pgadmin4.conf existe, alors il ne réexécute pas le script.
+        creates: /etc/apache2/conf-enabled/pgadmin4.conf
+
