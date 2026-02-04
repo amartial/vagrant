@@ -33,13 +33,16 @@ L'infrastructure est composée de trois serveurs sous **Ubuntu 20.04 (Focal)** :
 #### **🌐 Machine Frontend**
 * Installer **Node.js** et **NPM**.
 * Cloner le dépôt Git https://github.com/phil-form/balrog-js.
-* Replacer la chaine de caractère suivante `#$#{BACKEND_IP}#$#` par l'IP du back
+* Replacer la chaine de caractère suivante `#@#{BACK_IP}#@#` par l'IP du back
 * Installer les dépendances (`npm install`) et démarrer l'application (ex: via `npm start`).
 
 #### **⚙️ Machine Backend**
 * Installer **Node.js** et **NPM**.
 * Cloner le dépôt Git https://github.com/phil-form/backend.
-* Replacer la chaine de caractère suivante `#$#{DB_IP}#$#` par l'IP de la db
+* Replacer la chaine de caractère suivante `#@#{DB_HOST}#@#` par l'IP de la db
+* Replacer la chaine de caractère suivante `#@#{DB_USER}#@#` par l'utilisateur de la db
+* Replacer la chaine de caractère suivante `#@#{DB_PASSWORD}#@#` par le password de l'utilisateur
+* Replacer la chaine de caractère suivante `#@#{DB_NAME}#@#` par le nom de la db
 * Installer les dépendances (`npm install`) et démarrer l'application (ex: via `npm start`).
 
 #### **🗄️ Machine Database**
