@@ -1,79 +1,150 @@
-- hosts: webapp
+- name: Configuration de l'infrastructure Multi-Tiers
+  hosts: all
   become: true
+  vars:
+    # Variables globales pour la cohérence
+    db_host: "192.168.56.22"
+    db_name: "balrog_db"
+    db_user: "balrog_user"
+    db_pass: "balrog_password"
+    back_ip: "127.0.0.1" # réseau local car on est dans le browser (sur l'hote)
+    pgadmin_email: "admin@admin.com"
+    pgadmin_pass: "password123"
 
   tasks:
-    - name: Install nginx
-      apt:
-        name: nginx
+    # --- SECTION FRONTEND ---
+    - name: "[Frontend] Installer Node.js et NPM"
+      apt: { name: [nodejs, npm], state: present }
+      when: inventory_hostname == 'frontend'
+
+    - name: "[Frontend] Cloner le dépôt balrog-js"
+      git:
+        repo: 'https://github.com/phil-form/balrog-js'
+        dest: /home/vagrant/frontend
+        force: yes
+      when: inventory_hostname == 'frontend'
+
+    - name: "[Frontend] Configurer l'IP du Backend dans le code"
+      replace:
+        path: /home/vagrant/frontend/src/env/environement.ts # Ajustez le fichier cible si nécessaire
+        regexp: '#@#\{BACK_IP\}#@#'
+        replace: "{{ back_ip }}"
+      when: inventory_hostname == 'frontend'
+
+    - name: "[Frontend] Installer les dépendances et démarrer"
+      shell: |
+        npm install
+        nohup npm start > /dev/null 2>&1 &
+      args:
+        # Je me déplace dans le dossier frontend
+        chdir: /home/vagrant/frontend
+      when: inventory_hostname == 'frontend'
+
+    # --- SECTION BACKEND ---
+    - name: "[Backend] Installer Node.js et NPM"
+      apt: { name: [nodejs, npm], state: present }
+      when: inventory_hostname == 'backend'
+
+    - name: "[Backend] Cloner le dépôt backend"
+      git:
+        repo: 'https://github.com/phil-form/backend'
+        dest: /home/vagrant/backend
+        force: yes
+      when: inventory_hostname == 'backend'
+
+    - name: "[Backend] Configuration des variables DB dans le code"
+      replace:
+        path: "/home/vagrant/backend/src/{{ item.file }}"
+        regexp: "{{ item.regexp }}"
+        replace: "{{ item.replace }}"
+      loop:
+        - { file: 'data-source.ts', regexp: '#@#\{DB_HOST\}#@#', replace: "{{ db_host }}" }
+        - { file: 'data-source.ts', regexp: '#@#\{DB_USER\}#@#', replace: "{{ db_user }}" }
+        - { file: 'data-source.ts', regexp: '#@#\{DB_PASSWORD\}#@#', replace: "{{ db_pass }}" }
+        - { file: 'data-source.ts', regexp: '#@#\{DB_NAME\}#@#', replace: "{{ db_name }}" }
+      when: inventory_hostname == 'backend'
+
+    - name: "[Backend] Installer les dépendances et démarrer"
+      shell: |
+        npm install
+        npm run migrate
+      args:
+        chdir: /home/vagrant/backend
+      when: inventory_hostname == 'backend'
+
+    - name: "[Backend] Installer les dépendances et démarrer"
+      shell: |
+        npm install
+        nohup npm start > /dev/null 2>&1 &
+      args:
+        chdir: /home/vagrant/backend
+      when: inventory_hostname == 'backend'
+
+    # --- SECTION DATABASE & PGADMIN ---
+    - name: "[DB] Installer PostgreSQL et dépendances Python"
+      apt: { name: [postgresql, postgresql-contrib, python3-psycopg2, curl, gnupg], state: present }
+      when: inventory_hostname == 'database'
+
+    - name: "[DB] Configurer PostgreSQL pour écouter sur le réseau"
+      lineinfile:
+        path: /etc/postgresql/17/main/postgresql.conf
+        regexp: "^#listen_addresses"
+        line: "listen_addresses = '*'"
+      when: inventory_hostname == 'database'
+      notify: restart postgres
+
+    - name: "[DB] Sécuriser pg_hba.conf (Autoriser Backend uniquement)"
+      lineinfile:
+        path: /etc/postgresql/17/main/pg_hba.conf
+        line: "host all all 192.168.56.21/32 scram-sha-256"
+      when: inventory_hostname == 'database'
+      notify: restart postgres
+
+    - name: "[DB] Créer la base et l'utilisateur"
+      become_user: postgres
+      postgresql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_pass }}"
+        role_attr_flags: "SUPERUSER"
         state: present
+      when: inventory_hostname == 'database'
 
-    - name: Demarrer nginx
-      service:
-        name: nginx
-        state: started
-        enabled: yes
+    - name: "[DB] Créer la DB physique"
+      become_user: postgres
+      postgresql_db:
+        name: "{{ db_name }}"
+        owner: "{{ db_user }}"
+      when: inventory_hostname == 'database'
 
-    - name: "Configurer index.html"
-      copy:
-        dest: /var/www/html/index.html
-        src: index.html
-        mode: 0644
-
-- hosts: db
-  become: true
-
-  tasks:
-    - name: Install postgresql
-      apt:
-        name: postgresql
-        state: present
-
-    - name: Demarrer postgresql
-      service:
-        name: postgresql
-        state: started
-        enabled: yes
-
-- hosts: pgadmin
-  become: true
-
-  tasks:
-    - name: Install Pgadmin4 dependencies
-      apt:
-        name:
-          - curl
-          - ca-certificates
-          - gpg
-        state: present
-        update_cache: yes
-
-    - name: Download pgAdmin GPG key
+    - name: "[pgAdmin] Ajouter la clé GPG"
       get_url:
         url: https://www.pgadmin.org/static/packages_pgadmin_org.pub
         dest: /usr/share/keyrings/pgadmin-keyring.gpg
         mode: '0644'
+      when: inventory_hostname == 'database'
 
-    - name: Add pgAdmin repository
-      apt_repository:
-        repo: >
-          deb [signed-by=/usr/share/keyrings/pgadmin-keyring.gpg]
-          https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/{{ ansible_distribution_release }}
-          pgadmin4 main
-        state: present
-        filename: pgadmin4
+    - name: "[ pgAdmin ] Ajouter le dépôt"
+      shell: |
+        echo "deb [signed-by=/usr/share/keyrings/pgadmin-archive-keyring.gpg] https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/trixie pgadmin4 main" > /etc/apt/sources.list.d/pgadmin4.list
+      when: inventory_hostname == 'database'
 
-    - name: Install Pgadmin4
-      apt:
-        name: [pgadmin4-web, pgadmin4-server, postgresql-client]
-        state: present
-        update_cache: yes
+    - name: "[pgAdmin] Installer pgAdmin4-web"
+      apt: { name: pgadmin4-web, state: present, update_cache: yes }
+      when: inventory_hostname == 'database'
 
-    - name: Configure PGadmin4 web
+    - name: "[pgAdmin] Configuration automatique du mode Web"
       environment:
-        PGADMIN_SETUP_EMAIL: "test@test.com"
-        PGADMIN_SETUP_PASSWORD: "Password1234!"
+        PGADMIN_SETUP_EMAIL: "{{ pgadmin_email }}"
+        PGADMIN_SETUP_PASSWORD: "{{ pgadmin_pass }}"
       shell: "/usr/pgadmin4/bin/setup-web.sh --yes"
       args:
-        # Si /etc/apache2/conf-enabled/pgadmin4.conf existe, alors il ne réexécute pas le script.
         creates: /etc/apache2/conf-enabled/pgadmin4.conf
+      when: inventory_hostname == 'database'
 
+    # AJOUTE CECI ICI pour forcer le redémarrage AVANT la suite
+    - name: Appliquer les changements de configuration immédiatement
+      meta: flush_handlers
+      
+  handlers:
+    - name: restart postgres
+      service: { name: postgresql, state: restarted }

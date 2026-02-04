@@ -1,46 +1,47 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
 Vagrant.configure("2") do |config|
-   config.vm.define "webapp" do |webapp|
-     webapp.vm.box = "cloud-image/debian-13"
-     
-     webapp.vm.network "forwarded_port", guest: 80, host: 8080
-     webapp.vm.network "private_network", ip: "192.168.56.12"
-     
-     webapp.vm.provision "shell", inline: "sudo apt update"
-#      webapp.vm.provision "shell", path: "./myscript.sh"
+  config.vm.box = "bento/debian-13"
 
-     webapp.vm.provision "ansible" do |ansible|
-        ansible.playbook = "playbook.yml"
-        # Ici je dis que je sélectionne la configuration web (- hosts: webapp)
-        ansible.limit = "webapp"
-     end
-   end
-   
-   config.vm.define "db" do |db|
-     db.vm.box = "ubuntu/focal64"
-     db.vm.network "private_network", ip: "192.168.56.10"
-     
-     db.vm.provision "shell", inline: "sudo apt install vim curl"
-     
-     db.vm.provision "ansible" do |ansible|
-        ansible.playbook = "playbook.yml"
-        # Ici je dis que je sélectionne la configuration db (- hosts: db)
-        ansible.limit = "db"
-     end
-   end
+  # Provisioning Shell commun (Bootstrap)
+  config.vm.provision "shell", inline: <<-SHELL
+    apt-get update
+    apt-get install -y git curl acl
+  SHELL
 
-  config.vm.define "pgadmin" do |pgadmin|
-     pgadmin.vm.box = "cloud-image/debian-13"
+  # --- FRONTEND ---
+  config.vm.define "frontend" do |f|
+    f.vm.hostname = "frontend"
+    f.vm.network "private_network", ip: "192.168.56.20"
+    f.vm.network "forwarded_port", guest: 1980, host: 3001
+    f.vm.provision "ansible" do |ansible|
+      ansible.playbook = "playbook.yml"
+      ansible.limit = "frontend"
+    end
+  end
 
-     pgadmin.vm.network "forwarded_port", guest: 443, host: 8081
-     pgadmin.vm.network "forwarded_port", guest: 80, host: 8082
-     pgadmin.vm.network "private_network", ip: "192.168.56.11"
+  # --- DATABASE ---
+  # !!! La machine "database" doit être démarrée avant "backend" !!!
+  config.vm.define "database" do |d|
+    d.vm.hostname = "database"
+    d.vm.network "private_network", ip: "192.168.56.22"
+    # Port 80 pour pgAdmin (servi par Apache) exposé sur 8080 pour la validation
+    d.vm.network "forwarded_port", guest: 80, host: 8080
+    d.vm.provision "ansible" do |ansible|
+      ansible.playbook = "playbook.yml"
+      ansible.limit = "database"
+    end
+  end
 
-#      pgadmin.vm.provision "shell", path: "install_pgadmin.sh"
-
-     pgadmin.vm.provision "ansible" do |ansible|
-        ansible.playbook = "playbook.yml"
-        # Ici je dis que je sélectionne la configuration web (- hosts: pgadmin)
-        ansible.limit = "pgadmin"
-     end
-   end
+  # --- BACKEND ---
+  config.vm.define "backend" do |b|
+    b.vm.hostname = "backend"
+    b.vm.network "private_network", ip: "192.168.56.21"
+    b.vm.network "forwarded_port", guest: 3000, host: 3000
+    b.vm.provision "ansible" do |ansible|
+      ansible.playbook = "playbook.yml"
+      ansible.limit = "backend"
+    end
+  end
 end
