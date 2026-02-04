@@ -32,3 +32,77 @@ Créez un fichier `playbook.yml` et configurez Vagrant pour l'utiliser. Le playb
 1. Lancez la machine avec `vagrant up`.
 2. Vérifiez l'accès à la page web sur `http://localhost:8080` depuis votre navigateur.
 3. Connectez-vous en SSH (`vagrant ssh`) et vérifiez que le service postgres est actif : `systemctl status postgresql`.
+
+
+--------------------------------------------------------------------------------------------------------------
+
+
+## Correction : 
+
+Layout des fichiers : 
+
+```terminaloutput
+exercice_monolithe/
+├── Vagrantfile
+├── playbook.yml
+└── index.html
+```
+
+Vagrantfile
+```ruby
+Vagrant.configure("2") do |config|
+    config.vm.box = "ubuntu/focal64"
+
+    config.vm.network "forwarded_port", guest: 80, host: 8080
+
+    config.vm.provision "shell", inline: <<-SHELL
+        echo "Mise à jours du système..."
+        apt update
+        apt install -y curl vim
+    SHELL
+
+    config.vm.provision "ansible" do |ansible|
+        ansible.playbook = "playbook.yml"
+    end
+end
+```
+
+playbook.yml
+```yaml
+- hosts: all
+  become: true
+
+  tasks:
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Demarrer nginx
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Install postgresql
+      apt:
+        name: postgresql
+        state: present
+
+    - name: Demarrer postgresql
+      service:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    - name: "Configurer index.html"
+      copy:
+        dest: /var/www/html/index.html
+        src: index.html
+        mode: 0644
+```
+
+index.html
+```html
+<h1>La plus belle page du monde !</h1>
+```

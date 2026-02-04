@@ -1,4 +1,25 @@
-- hosts: all
+- hosts: web
+  become: true
+
+  tasks:
+    - name: Install apache2
+      apt:
+        name: apache2
+        state: present
+
+    - name: Demarrer apache2
+      service:
+        name: apache2
+        state: started
+        enabled: yes
+
+    - name: "Configurer index.html"
+      copy:
+        dest: /var/www/html/index.html
+        src: index.html
+        mode: 0644
+
+- hosts: db
   become: true
 
   tasks:
@@ -7,7 +28,8 @@
         name: postgresql
         state: present
 
-    - name: "Configurer critical.conf"
-      copy:
-        dest: /etc/critical2.conf
-        content: "unique_value"
+    - name: Demarrer postgresql
+      service:
+        name: postgresql
+        state: started
+        enabled: yes
